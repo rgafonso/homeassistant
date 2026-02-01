@@ -7,94 +7,117 @@ blueprint:
   # Ensure this matches your GitHub URL exactly
   source_url: https://github.com/rgafonso/homeassistant/blob/main/smart-lights.yaml
   input:
-    # 1. SENSOR
-    motion_entity:
-      name: Motion Sensor
-      selector:
-        entity:
-          domain: binary_sensor
-          device_class: motion
+    # ----------------------------------------------------------------
+    # SECTION 1: CORE SETTINGS (Always Visible)
+    # ----------------------------------------------------------------
+    section_core:
+      name: Motion & Light
+      description: The main settings for your automation.
+      icon: mdi:run
+      input:
+        motion_entity:
+          name: Motion Sensor
+          selector:
+            entity:
+              domain: binary_sensor
+              device_class: motion
+        target_light:
+          name: Light or Switch
+          selector:
+            target:
+              entity:
+                domain: 
+                  - light
+                  - switch
+        no_motion_wait:
+          name: Wait Time (Seconds)
+          description: Time to wait after motion stops before turning off.
+          default: 120
+          selector:
+            number:
+              min: 0
+              max: 3600
+              unit_of_measurement: seconds
 
-    # 2. TIMING
-    no_motion_wait:
-      name: Wait Time (Seconds)
-      description: Time to wait after motion stops before turning off.
-      default: 120
-      selector:
-        number:
-          min: 0
-          max: 3600
-          unit_of_measurement: seconds
+    # ----------------------------------------------------------------
+    # SECTION 2: SUN CONSTRAINTS (Always Visible)
+    # ----------------------------------------------------------------
+    section_sun:
+      name: Sun Schedule
+      description: Define the "Night" window relative to the sun.
+      icon: mdi:weather-sunset
+      input:
+        sunset_offset:
+          name: Sunset Offset
+          description: Negative for before sunset, positive for after (e.g., -00:30:00).
+          default: "-00:30:00"
+          selector:
+            text: {}
+        sunrise_offset:
+          name: Sunrise Offset
+          description: Negative for before sunrise, positive for after (e.g., 00:30:00).
+          default: "00:30:00"
+          selector:
+            text: {}
 
-    # 3. LIGHTS
-    target_light:
-      name: Light or Switch
-      selector:
-        target:
-          entity:
-            domain: 
-              - light
-              - switch
+    # ----------------------------------------------------------------
+    # SECTION 3: ADVANCED LIGHTING (Collapsed by Default)
+    # ----------------------------------------------------------------
+    section_light_settings:
+      name: Advanced Light Settings (Optional)
+      description: Force specific brightness or color when turning on.
+      icon: mdi:lightbulb-cog
+      collapsed: true
+      input:
+        target_brightness:
+          name: Brightness %
+          description: Leave at 0 to use the light's current setting (Disabled).
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 100
+              unit_of_measurement: "%"
+        target_kelvin:
+          name: Color Temp (K)
+          description: Leave at 0 to use the light's current setting (Disabled).
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 6500
+              unit_of_measurement: K
 
-    # 4. LIGHT PROPERTIES
-    target_brightness:
-      name: (Optional) Brightness %
-      description: Leave at 0 to use the light's current or default brightness.
-      default: 0
-      selector:
-        number:
-          min: 0
-          max: 100
-          unit_of_measurement: "%"
-    target_kelvin:
-      name: (Optional) Color Temp (K)
-      description: Leave at 0 to use the light's current or default color.
-      default: 0
-      selector:
-        number:
-          min: 0
-          max: 6500
-          unit_of_measurement: K
-
-    # 5. SUN SETTINGS
-    sunset_offset:
-      name: Sunset Offset
-      description: Negative for before sunset, positive for after (e.g., -00:30:00).
-      default: "-00:30:00"
-      selector:
-        text: {}
-    sunrise_offset:
-      name: Sunrise Offset
-      description: Negative for before sunrise, positive for after (e.g., 00:30:00).
-      default: "00:30:00"
-      selector:
-        text: {}
-
-    # 6. LUX SETTINGS
-    lux_sensor:
-      name: (Optional) Illuminance Sensor
-      description: If set, lights will also turn on when lux is below the threshold, regardless of time.
-      default: []
-      selector:
-        entity:
-          domain: sensor
-          device_class: illuminance
-          multiple: false
-    lux_threshold:
-      name: Lux Threshold
-      description: Trigger if lux is below this value (e.g., 50).
-      default: 50
-      selector:
-        number:
-          min: 0
-          max: 1000
+    # ----------------------------------------------------------------
+    # SECTION 4: LUX OVERRIDE (Collapsed by Default)
+    # ----------------------------------------------------------------
+    section_lux:
+      name: Lux Sensor Override (Optional)
+      description: Enable this to turn on lights during the day if it is dark.
+      icon: mdi:brightness-6
+      collapsed: true
+      input:
+        lux_sensor:
+          name: Illuminance Sensor
+          description: Select a sensor to enable this feature.
+          default: []
+          selector:
+            entity:
+              domain: sensor
+              device_class: illuminance
+              multiple: false
+        lux_threshold:
+          name: Lux Threshold
+          description: Trigger if lux is below this value.
+          default: 50
+          selector:
+            number:
+              min: 0
+              max: 1000
 
 mode: restart
 max_exceeded: silent
 
-# ----------------------------------------------------------
-# Variables Mapping (Required for Templates)
-# ----------------------------------------------------------
 variables:
   var_lux_sensor: !input lux_sensor
   var_target_brightness: !input target_brightness
@@ -109,13 +132,11 @@ trigger:
 condition:
   - condition: or
     conditions:
-      # Condition 1: Sun Elevation
       - condition: sun
         after: sunset
         after_offset: !input sunset_offset
         before: sunrise
         before_offset: !input sunrise_offset
-      # Condition 2: Lux (only if sensor is defined)
       - condition: and
         conditions:
           - condition: template
@@ -126,7 +147,6 @@ condition:
 
 action:
   - choose:
-      # Check if we need to apply specific Light settings
       - conditions:
           - condition: or
             conditions:
