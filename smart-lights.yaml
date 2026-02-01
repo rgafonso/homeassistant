@@ -1,0 +1,143 @@
+blueprint:
+  name: Smart Lights
+  description: >
+    Turn on a light on motion if it is Night (Sun-based) OR if it is dark (Lux-based).
+    Turns off after a set time of no motion.
+  domain: automation
+  source_url: https://github.com/yourusername/your-repo/blob/main/my_blueprint.yaml
+  input:
+    motion_entity:
+      name: Motion Sensor
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class: motion
+    target_light:
+      name: Light or Switch
+      selector:
+        target:
+          entity:
+            domain: 
+              - light
+              - switch
+    # SUN SETTINGS
+    sunset_offset:
+      name: Sunset Offset
+      description: Negative for before sunset, positive for after.
+      default: "-00:30:00"
+      selector:
+        text: {}
+    sunrise_offset:
+      name: Sunrise Offset
+      description: Negative for before sunrise, positive for after.
+      default: "00:30:00"
+      selector:
+        text: {}
+    # LUX SETTINGS (OPTIONAL)
+    lux_sensor:
+      name: (Optional) Illuminance Sensor
+      description: If set, lights will also turn on when lux is below the threshold, regardless of time.
+      default: []
+      selector:
+        entity:
+          domain: sensor
+          device_class: illuminance
+          multiple: false
+    lux_threshold:
+      name: Lux Threshold
+      description: Trigger if lux is below this value (e.g., 50).
+      default: 50
+      selector:
+        number:
+          min: 0
+          max: 1000
+    # TIMING & LIGHT
+    no_motion_wait:
+      name: Wait Time (Seconds)
+      default: 120
+      selector:
+        number:
+          min: 0
+          max: 3600
+          unit_of_measurement: seconds
+    target_brightness:
+      name: (Optional) Brightness %
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+    target_kelvin:
+      name: (Optional) Color Temp (K)
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 6500
+          unit_of_measurement: K
+
+mode: restart
+max_exceeded: silent
+
+trigger:
+  - platform: state
+    entity_id: !input motion_entity
+    to: "on"
+
+condition:
+  - condition: or
+    conditions:
+      # Condition 1: Sun Elevation
+      - condition: sun
+        after: sunset
+        after_offset: !input sunset_offset
+        before: sunrise
+        before_offset: !input sunrise_offset
+      # Condition 2: Lux (only if sensor is defined)
+      - condition: and
+        conditions:
+          - condition: template
+            value_template: "{{ inputs.lux_sensor != [] }}"
+          - condition: numeric_state
+            entity_id: !input lux_sensor
+            below: !input lux_threshold
+
+action:
+  - choose:
+      - conditions:
+          - condition: or
+            conditions:
+              - condition: template
+                value_template: "{{ inputs.target_brightness | int > 0 }}"
+              - condition: template
+                value_template: "{{ inputs.target_kelvin | int > 0 }}"
+        sequence:
+          - service: light.turn_on
+            target: !input target_light
+            data:
+              brightness_pct: >
+                {% if inputs.target_brightness | int > 0 %}
+                  {{ inputs.target_brightness }}
+                {% else %}
+                  {{ state_attr(inputs.target_light, 'brightness') | default(255) | int / 2.55 }}
+                {% endif %}
+              kelvin: >
+                {% if inputs.target_kelvin | int > 0 %}
+                  {{ inputs.target_kelvin }}
+                {% else %}
+                  {{ state_attr(inputs.target_light, 'color_temp_kelvin') | default(3000) }}
+                {% endif %}
+    default:
+      - service: homeassistant.turn_on
+        target: !input target_light
+
+  - wait_for_trigger:
+      - platform: state
+        entity_id: !input motion_entity
+        to: "off"
+        for:
+          seconds: !input no_motion_wait
+
+  - service: homeassistant.turn_off
+    target: !input target_light
