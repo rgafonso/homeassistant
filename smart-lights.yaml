@@ -7,8 +7,6 @@ blueprint:
     1. It is Night (based on Sun Schedule)
     OR
     2. It is Dark (based on Lux Sensor, if provided)
-    
-    *Uses device memory for brightness/color.*
   domain: automation
   source_url: https://github.com/rgafonso/homeassistant/blob/main/smart-lights.yaml
   input:
@@ -120,16 +118,14 @@ condition:
             below: !input illuminance_threshold
 
 action:
-  # DIRECT ACTION: No more choose/default logic needed
   - service: homeassistant.turn_on
     target: !input target_entities
 
-  - wait_for_trigger:
-      - platform: state
-        entity_id: !input motion_sensor
-        to: "off"
+  - wait_template: "{{ is_state(motion_sensor, 'off') }}"
         for:
+    for: !input off_timer
           seconds: !input off_timer
+    continue_on_timeout: true
 
   - service: homeassistant.turn_off
     target: !input target_entities
