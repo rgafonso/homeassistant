@@ -1,12 +1,14 @@
 blueprint:
   name: Smart Motion Lights & Switches
   description: >
-    Version: 1.0.1 (Lite)
+    Version: 1.0.2 (Bulletproof Wait)
     
     Turn on lights when motion is detected IF:
     1. It is Night (based on Sun Schedule)
     OR
     2. It is Dark (based on Lux Sensor, if provided)
+    
+    *Fixed: Lights staying on if sensor is too fast.*
   domain: automation
   source_url: https://github.com/rgafonso/homeassistant/blob/main/smart-lights.yaml
   input:
@@ -89,8 +91,9 @@ mode: restart
 max_exceeded: silent
 
 variables:
-  # We still need this variable to check if the user provided a sensor
   illuminance_sensor: !input illuminance_sensor
+  # We need to map the motion sensor to a variable for the template check
+  motion_sensor: !input motion_sensor
 
 trigger:
   - platform: state
@@ -122,9 +125,7 @@ action:
     target: !input target_entities
 
   - wait_template: "{{ is_state(motion_sensor, 'off') }}"
-        for:
     for: !input off_timer
-          seconds: !input off_timer
     continue_on_timeout: true
 
   - service: homeassistant.turn_off
