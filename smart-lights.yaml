@@ -19,14 +19,14 @@ blueprint:
       description: The main settings for your automation.
       icon: mdi:run
       input:
-        motion_entity:
+        motion_sensor:
           name: Motion Sensor
           description: The starting trigger
           selector:
             entity:
               domain: binary_sensor
               device_class: motion
-        target_light:
+        target_entities:
           name: Lights & Switches
           description: Select all that you wish to enable
           selector:
@@ -35,7 +35,7 @@ blueprint:
                 domain: 
                   - light
                   - switch
-        no_motion_wait:
+        off_timer:
           name: Wait Time (Seconds)
           description: The time which after no motion detected, everything resets
           default: 30
@@ -50,7 +50,7 @@ blueprint:
     # ----------------------------------------------------------------
     section_sun:
       name: Sun Schedule
-      description: Mainly designed for night time. Can be overriden by lux
+      description: Mainly designed for night time. Can be overridden by illuminance
       icon: mdi:weather-sunset
       input:
         sunset_offset:
@@ -73,13 +73,13 @@ blueprint:
     # ----------------------------------------------------------------
     # SECTION 3: LUX OVERRIDE (Optional)
     # ----------------------------------------------------------------
-    section_lux:
-      name: Lux (Overrides Sun Schedule)
-      description: Triggers lights based on lux, useful for cloudy indoors.
+    section_illuminance:
+      name: Illuminance or Lux (Overrides Sun Schedule)
+      description: Triggers lights based on illuminance, useful for cloudy indoors.
       icon: mdi:brightness-6
       collapsed: true
       input:
-        lux_sensor:
+        illuminance_sensor:
           name: Illuminance Sensor
           description: If set, lights turn on when below threshold (regardless of sun).
           default: []
@@ -88,9 +88,9 @@ blueprint:
               domain: sensor
               device_class: illuminance
               multiple: false
-        lux_threshold:
+        illuminance_threshold:
           name: Lux Threshold
-          description: Always trigger if lux is below this value and illuminance sensor set.
+          description: Always trigger if illuminance is below this value and illuminance sensor set.
           default: 50
           selector:
             number:
@@ -106,7 +106,7 @@ blueprint:
       icon: mdi:lightbulb-on-50
       collapsed: true
       input:
-        target_brightness:
+        brightness:
           name: Brightness %
           default: 0
           selector:
@@ -114,7 +114,7 @@ blueprint:
               min: 0
               max: 100
               unit_of_measurement: "%"
-        target_kelvin:
+        kelvin:
           name: Color Temp (K)
           default: 0
           selector:
@@ -127,26 +127,26 @@ mode: restart
 max_exceeded: silent
 
 variables:
-  var_lux_sensor: !input lux_sensor
-  var_target_brightness: !input target_brightness
-  var_target_kelvin: !input target_kelvin
-  var_target_light: !input target_light
+  illuminance_sensor: !input illuminance_sensor
+  brightness: !input brightness
+  kelvin: !input kelvin
+  target_entities: !input target_entities
   safe_kelvin: >
     {# 1. Initialize with User Input #}
-    {% set ns = namespace(kelvin=var_target_kelvin | int, lights=[]) %}
+    {% set ns = namespace(kelvin=kelvin | int, lights=[]) %}
     
     {# 2. Get direct Entities #}
-    {% set entities = var_target_light.entity_id | default([]) %}
+    {% set entities = target_entities.entity_id | default([]) %}
     {% set ns.lights = ns.lights + entities %}
 
     {# 3. Get entities from Areas (Fix: Loop through the list) #}
-    {% set area_ids = var_target_light.area_id | default([]) %}
+    {% set area_ids = target_entities.area_id | default([]) %}
     {% for area in area_ids %}
       {% set ns.lights = ns.lights + area_entities(area) %}
     {% endfor %}
 
     {# 4. Get entities from Devices (Fix: Loop through devices too) #}
-    {% set device_ids = var_target_light.device_id | default([]) %}
+    {% set device_ids = target_entities.device_id | default([]) %}
     {% for dev in device_ids %}
       {% set ns.lights = ns.lights + device_entities(dev) %}
     {% endfor %}
@@ -171,7 +171,7 @@ variables:
 
 trigger:
   - platform: state
-    entity_id: !input motion_entity
+    entity_id: !input motion_sensor
     to: "on"
     alias: "Motion Detected"
 
@@ -189,24 +189,24 @@ condition:
       - condition: and
         conditions:
           - condition: template
-            value_template: "{{ var_lux_sensor != [] }}"
+            value_template: "{{ illuminance_sensor != [] }}"
           - condition: numeric_state
-            entity_id: !input lux_sensor
-            below: !input lux_threshold
+            entity_id: !input illuminance_sensor
+            below: !input illuminance_threshold
 
 action:
   - choose:
       # SCENARIO 1: User set both Brightness and temperature
       - conditions:
           - condition: template
-            value_template: "{{ var_target_brightness | int > 0 }}"
+            value_template: "{{ brightness | int > 0 }}"
           - condition: template
-            value_template: "{{ var_target_kelvin | int > 0 }}"
+            value_template: "{{ kelvin | int > 0 }}"
         sequence:
           - service: light.turn_on
-            target: !input target_light
+            target: !input target_entities
             data:
-              brightness_pct: "{{ var_target_brightness }}"
+              brightness_pct: "{{ brightness }}"
               color_temp_kelvin: "{{ safe_kelvin }}"
             # FIX: Prevent crash if device rejects the color
             continue_on_error: true
@@ -214,21 +214,21 @@ action:
       # SCENARIO 2: User set only Brightness
       - conditions:
           - condition: template
-            value_template: "{{ var_target_brightness | int > 0 }}"
+            value_template: "{{ brightness | int > 0 }}"
         sequence:
           - service: light.turn_on
-            target: !input target_light
+            target: !input target_entities
             data:
-              brightness_pct: "{{ var_target_brightness }}"
+              brightness_pct: "{{ brightness }}"
             continue_on_error: true
 
       # SCENARIO 3: User set only Temperature
       - conditions:
           - condition: template
-            value_template: "{{ var_target_kelvin | int > 0 }}"
+            value_template: "{{ kelvin | int > 0 }}"
         sequence:
           - service: light.turn_on
-            target: !input target_light
+            target: !input target_entities
             data:
               color_temp_kelvin: "{{ safe_kelvin }}"
             continue_on_error: true
@@ -236,14 +236,14 @@ action:
     # SCENARIO 4 (Default): User set NOTHING -> Just Turn On (Use Memory)
     default:
       - service: homeassistant.turn_on
-        target: !input target_light
+        target: !input target_entities
 
   - wait_for_trigger:
       - platform: state
-        entity_id: !input motion_entity
+        entity_id: !input motion_sensor
         to: "off"
         for:
-          seconds: !input no_motion_wait
+          seconds: !input off_timer
 
   - service: homeassistant.turn_off
-    target: !input target_light
+    target: !input target_entities
