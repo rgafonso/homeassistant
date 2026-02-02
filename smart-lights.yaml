@@ -157,12 +157,13 @@ variables:
     {# 6. Run the Safety Loop #}
     {% if ns.kelvin > 0 %}
       {% for light in all_lights %}
-        {# SAFETY: Default to 0/10000 for non-color devices (switches/dimmers) #}
-        {% set current_min = state_attr(light, 'min_color_temp_kelvin') | default(0, true) %}
-        {% set current_max = state_attr(light, 'max_color_temp_kelvin') | default(10000, true) %}
-        
-        {# The Clamp Logic #}
-        {% set ns.kelvin = [[ns.kelvin, current_min]|max, current_max]|min %}
+        {# SAFETY: Default to -1 for non-color devices (switches/dimmers) #}
+        {% set min_kelvin = state_attr(light, 'min_color_temp_kelvin') | default(-1, true) %}
+        {% set max_kelvin = state_attr(light, 'max_color_temp_kelvin') | default(-1, true) %}
+
+        {% if min_kelvin > 0 %}
+          {% set ns.kelvin = [[ns.kelvin, current_min]|max, current_max]|min %}
+        {% endif %}
       {% endfor %}
     {% endif %}
    
@@ -208,8 +209,7 @@ action:
             data:
               brightness_pct: "{{ brightness }}"
               color_temp_kelvin: "{{ safe_kelvin }}"
-            # FIX: Prevent crash if device rejects the color
-            continue_on_error: true
+              transition: 0
 
       # SCENARIO 2: User set only Brightness
       - conditions:
@@ -220,7 +220,7 @@ action:
             target: !input target_entities
             data:
               brightness_pct: "{{ brightness }}"
-            continue_on_error: true
+              transition: 0
 
       # SCENARIO 3: User set only Temperature
       - conditions:
@@ -231,7 +231,7 @@ action:
             target: !input target_entities
             data:
               color_temp_kelvin: "{{ safe_kelvin }}"
-            continue_on_error: true
+              transition: 0
           
     # SCENARIO 4 (Default): User set NOTHING -> Just Turn On (Use Memory)
     default:
