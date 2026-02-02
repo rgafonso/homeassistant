@@ -1,19 +1,20 @@
 blueprint:
-  name: Smart Motion Light (Universal)
+  name: Smart Motion Lights & Switches
   description: >
-    Version: 3.0 (Exclusive Modes)
+    Version: 5.0 (Hybrid Sun + Lux)
+
+    Turn on lights when motion is detected IF:
+    1. It is Night (based on Sun Schedule)
+    OR
+    2. It is Dark (based on Lux Sensor, if provided)
     
-    A universal blueprint for two distinct use cases:
-    1. OUTDOOR: Uses Sun Schedule (Sunset/Sunrise).
-    2. INDOOR: Uses Lux Sensor (ignores Sun).
-    
-    Can also combine them if desired, but designed for exclusive use.
+    Perfect for outdoors (Sun) or indoors (Sun + Lux Override).
   domain: automation
   # Ensure this matches your GitHub URL exactly
   source_url: https://github.com/rgafonso/homeassistant/blob/main/smart-lights.yaml
   input:
     # ----------------------------------------------------------------
-    # SECTION 1: MOTION & LIGHT (Common)
+    # SECTION 1: MOTION & LIGHT
     # ----------------------------------------------------------------
     section_core:
       name: Motion & Light
@@ -22,12 +23,14 @@ blueprint:
       input:
         motion_entity:
           name: Motion Sensor
+          description: The starting trigger
           selector:
             entity:
               domain: binary_sensor
               device_class: motion
         target_light:
-          name: Light or Switch
+          name: Lights & Switches
+          description: Select all that you wish to enable
           selector:
             target:
               entity:
@@ -36,55 +39,51 @@ blueprint:
                   - switch
         no_motion_wait:
           name: Wait Time (Seconds)
-          default: 120
+          description: The time which after no motion detected, everything resets
+          default: 30
           selector:
             number:
               min: 0
-              max: 3600
+              max: 300
               unit_of_measurement: seconds
 
     # ----------------------------------------------------------------
-    # SECTION 2: OUTDOOR MODE (Sun Schedule)
+    # SECTION 2: SUN SCHEDULE (Primary)
     # ----------------------------------------------------------------
     section_sun:
-      name: Outdoor / Sun Settings
-      description: Configure this for Outdoor lights.
+      name: Sun Schedule
+      description: The primary rule. Defines "Night Time".
       icon: mdi:weather-sunset
       input:
-        use_sun:
-          name: Use Sun Schedule?
-          description: >
-            Disable this for Indoor (Lux-only) automations. 
-            If OFF, sunset/sunrise is ignored.
-          default: true
-          selector:
-            boolean: {}
         sunset_offset:
           name: Sunset Offset
-          description: Positive to start AFTER sunset (e.g. 00:15:00).
-          default: "00:15:00"
+          description: >
+            Positive (e.g. 00:30:00) starts after sunset.
+            Negative (e.g. -00:15:00) starts before sunset.
+          default: "00:30:00"
           selector:
             text: {}
         sunrise_offset:
           name: Sunrise Offset
-          description: Negative to stop BEFORE sunrise (e.g. -00:15:00).
-          default: "-00:15:00"
+          description: >
+            Negative (e.g. -00:30:00) stops after sunrise.
+            Positive (e.g. 00:15:00) stops before sunrise.
+          default: "-00:30:00"
           selector:
             text: {}
 
     # ----------------------------------------------------------------
-    # SECTION 3: INDOOR MODE (Lux Sensor)
+    # SECTION 3: LUX OVERRIDE (Optional)
     # ----------------------------------------------------------------
     section_lux:
-      name: Indoor / Lux Settings
-      description: Configure this for Indoor lights (requires sensor).
+      name: Cloudy/Indoors Override (Optional)
+      description: Triggers light even during the day if it's dark (Cloudy/Indoors).
       icon: mdi:brightness-6
-      # Collapsed by default to keep UI clean if using Outdoor mode
       collapsed: true
       input:
         lux_sensor:
           name: Illuminance Sensor
-          description: Required if "Use Sun Schedule" is OFF.
+          description: If set, lights turn on when below threshold (regardless of sun).
           default: []
           selector:
             entity:
@@ -93,7 +92,7 @@ blueprint:
               multiple: false
         lux_threshold:
           name: Lux Threshold
-          description: Trigger if lux is below this value.
+          description: Always trigger if lux is below this value and illuminance sensor set.
           default: 50
           selector:
             number:
@@ -105,7 +104,8 @@ blueprint:
     # ----------------------------------------------------------------
     section_light_settings:
       name: Advanced Light Settings (Optional)
-      icon: mdi:lightbulb-settings
+      description: Optionally choose brightness & color temperature (if supported) 
+      icon: mdi:brightness-6
       collapsed: true
       input:
         target_brightness:
@@ -130,7 +130,6 @@ max_exceeded: silent
 
 variables:
   var_lux_sensor: !input lux_sensor
-  var_use_sun: !input use_sun
   var_target_brightness: !input target_brightness
   var_target_kelvin: !input target_kelvin
   var_target_light: !input target_light
@@ -144,20 +143,16 @@ condition:
   - condition: or
     conditions:
       # ----------------------------------------------------
-      # LOGIC A: Sun Schedule (Only runs if use_sun is TRUE)
+      # RULE 1: Sun Schedule
       # ----------------------------------------------------
-      - condition: and
-        conditions:
-          - condition: template
-            value_template: "{{ var_use_sun }}"
-          - condition: sun
-            after: sunset
-            after_offset: !input sunset_offset
-            before: sunrise
-            before_offset: !input sunrise_offset
+      - condition: sun
+        after: sunset
+        after_offset: !input sunset_offset
+        before: sunrise
+        before_offset: !input sunrise_offset
 
       # ----------------------------------------------------
-      # LOGIC B: Lux Sensor (Only runs if Sensor is set)
+      # RULE 2: Lux Override (Only if sensor is set)
       # ----------------------------------------------------
       - condition: and
         conditions:
