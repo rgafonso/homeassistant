@@ -1,7 +1,7 @@
 blueprint:
   name: Smart Motion Lights & Switches
   description: >
-    Version: 5.2 (Safe Mode - No Guessing)
+    Version: 1.6 Set kelvin within capabilities
     
     Turn on lights when motion is detected IF:
     1. It is Night (based on Sun Schedule)
@@ -139,15 +139,19 @@ variables:
     {% set areas = area_entities(var_target_light.area_id | default([])) %}
     {% set entities = var_target_light.entity_id | default([]) %}
     {% set all_lights = (entities + areas) | unique | list %}
-  
-    {# 3. Run Your Loop (Only if user actually requested a color > 0) #}
+   
+    {# 3. Run Your Loop #}
     {% if ns.kelvin > 0 %}
       {% for light in all_lights %}
-        {# Your snippet logic: #}
-        {% set ns.kelvin = [[ns.kelvin, state_attr(light, 'min_color_temp_kelvin')]|max, state_attr(light, 'max_color_temp_kelvin')]|min %}
+        {# SAFETY: Use default(0, true) for switches that lack the attribute #}
+        {% set current_min = state_attr(light, 'min_color_temp_kelvin') | default(0, true) %}
+        {% set current_max = state_attr(light, 'max_color_temp_kelvin') | default(10000, true) %}
+        
+        {# The Clamp Logic #}
+        {% set ns.kelvin = [[ns.kelvin, current_min]|max, current_max]|min %}
       {% endfor %}
     {% endif %}
-  
+   
     {# 4. Output the Final Result #}
     {{ ns.kelvin }}
 
