@@ -1,28 +1,25 @@
 blueprint:
   name: Smart Motion Lights & Switches
-  description: >
-    Version: 1.0.3 (accept motion/occupancy and presence)
+  description: |
+    Version: 1.0.3
     
-    Turn on lights when motion is detected IF:
-    1. It is Night (based on Sun Schedule)
-    OR
-    2. It is Dark (based on Lux Sensor, if provided)
-    
-    *Fixed: Lights staying on if sensor is too fast.*
+    Turn on lights when motion, occupancy or presence is detected if it's night time, based on sunset/sunrise (with offsets) for your location.
+    Can be overriden by lux (illuminance) sensor and threshold, useful for indoors or cloudy days
   domain: automation
   source_url: https://github.com/rgafonso/homeassistant/blob/main/smart-lights.yaml
   input:
     section_core:
-      name: Motion & Light
+      name: Sensor + Lights & Switches
       description: The main settings for your automation.
       icon: mdi:run
       input:
-        motion_sensor:
-          name: Motion Sensor
-          description: The starting trigger
+        main_sensor:
+          name: Main Sensor
+          description: Choose a motion, occupancy or presence sensor
           selector:
             entity:
               domain: binary_sensor
+              device_class:
                 - motion
                 - occupancy
                 - presence
@@ -37,7 +34,7 @@ blueprint:
                   - switch
         off_timer:
           name: Wait Time (Seconds)
-          description: The time which after no motion detected, everything resets
+          description: The time which after sensor is off, the lights & switches also turn off
           default: 30
           selector:
             number:
@@ -46,7 +43,7 @@ blueprint:
               unit_of_measurement: seconds
     section_sun:
       name: Sun Schedule
-      description: Mainly designed for night time. Can be overridden by illuminance
+      description: Mainly designed for night time. Can be overridden by lux (illuminance)
       icon: mdi:weather-sunset
       input:
         sunset_offset:
@@ -66,13 +63,13 @@ blueprint:
           selector:
             text: {}
     section_illuminance:
-      name: Illuminance or Lux (Overrides Sun Schedule)
+      name: Lux Settings (Overrides Sun Schedule)
       description: Triggers lights based on illuminance, useful for cloudy indoors.
       icon: mdi:brightness-6
       collapsed: true
       input:
         illuminance_sensor:
-          name: Illuminance Sensor
+          name: Lux (illuminance) Sensor
           description: If set, lights turn on when below threshold (regardless of sun).
           default: []
           selector:
@@ -81,8 +78,8 @@ blueprint:
               device_class: illuminance
               multiple: false
         illuminance_threshold:
-          name: Lux Threshold
-          description: Always trigger if illuminance is below this value and illuminance sensor set.
+          name: Lux (illuminance) Threshold
+          description: Always trigger if lux is below this value and lux sensor set.
           default: 50
           selector:
             number:
@@ -95,11 +92,11 @@ max_exceeded: silent
 variables:
   illuminance_sensor: !input illuminance_sensor
   # We need to map the motion sensor to a variable for the template check
-  motion_sensor: !input motion_sensor
+  main_sensor: !input main_sensor
 
 trigger:
   - platform: state
-    entity_id: !input motion_sensor
+    entity_id: !input main_sensor
     to: "on"
     alias: "Motion Detected"
 
@@ -128,12 +125,12 @@ action:
 
   - if:
       - condition: state
-        entity_id: !input motion_sensor
+        entity_id: !input main_sensor
         state: "on"
     then:
       - wait_for_trigger:
           - platform: state
-            entity_id: !input motion_sensor
+            entity_id: !input main_sensor
             to: "off"
 
   - delay: 
