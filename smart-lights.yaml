@@ -74,8 +74,8 @@ blueprint:
     # SECTION 3: LUX OVERRIDE (Optional)
     # ----------------------------------------------------------------
     section_lux:
-      name: Cloudy/Indoors Override (Optional)
-      description: Triggers light even during the day if it's dark (Cloudy/Indoors).
+      name: Lux (Optional)
+      description: Triggers even during the day if it's dark (Cloudy/Indoors).
       icon: mdi:brightness-6
       collapsed: true
       input:
@@ -103,7 +103,7 @@ blueprint:
     section_light_settings:
       name: Advanced Light Settings (Optional)
       description: Optionally choose brightness & color temperature (if supported).
-      icon: mdi:brightness-6
+      icon: mdi:lightbulb-on-50
       collapsed: true
       input:
         target_brightness:
