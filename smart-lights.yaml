@@ -162,7 +162,7 @@ variables:
         {% set max_kelvin = state_attr(light, 'max_color_temp_kelvin') | default(-1, true) %}
 
         {% if min_kelvin > 0 %}
-          {% set ns.kelvin = [[ns.kelvin, current_min]|max, current_max]|min %}
+          {% set ns.kelvin = [[ns.kelvin, min_kelvin]|max, max_kelvin]|min %}
         {% endif %}
       {% endfor %}
     {% endif %}
