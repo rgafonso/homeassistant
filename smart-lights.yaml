@@ -1,14 +1,12 @@
 blueprint:
   name: Smart Motion Lights & Switches
   description: >
-    Version: 5.0 (Hybrid Sun + Lux)
-
+    Version: 5.2 (Safe Mode - No Guessing)
+    
     Turn on lights when motion is detected IF:
     1. It is Night (based on Sun Schedule)
     OR
     2. It is Dark (based on Lux Sensor, if provided)
-    
-    Perfect for outdoors (Sun) or indoors (Sun + Lux Override).
   domain: automation
   # Ensure this matches your GitHub URL exactly
   source_url: https://github.com/rgafonso/homeassistant/blob/main/smart-lights.yaml
@@ -104,7 +102,7 @@ blueprint:
     # ----------------------------------------------------------------
     section_light_settings:
       name: Advanced Light Settings (Optional)
-      description: Optionally choose brightness & color temperature (if supported) 
+      description: Optionally choose brightness & color temperature (if supported).
       icon: mdi:brightness-6
       collapsed: true
       input:
@@ -142,18 +140,14 @@ trigger:
 condition:
   - condition: or
     conditions:
-      # ----------------------------------------------------
       # RULE 1: Sun Schedule
-      # ----------------------------------------------------
       - condition: sun
         after: sunset
         after_offset: !input sunset_offset
         before: sunrise
         before_offset: !input sunrise_offset
 
-      # ----------------------------------------------------
       # RULE 2: Lux Override (Only if sensor is set)
-      # ----------------------------------------------------
       - condition: and
         conditions:
           - condition: template
@@ -163,30 +157,42 @@ condition:
             below: !input lux_threshold
 
 action:
+  # LOGIC: Check exactly what the user requested and send ONLY that.
   - choose:
+      # SCENARIO 1: User set BOTH Brightness AND Color
       - conditions:
-          - condition: or
-            conditions:
-              - condition: template
-                value_template: "{{ var_target_brightness | int > 0 }}"
-              - condition: template
-                value_template: "{{ var_target_kelvin | int > 0 }}"
+          - condition: template
+            value_template: "{{ var_target_brightness | int > 0 }}"
+          - condition: template
+            value_template: "{{ var_target_kelvin | int > 0 }}"
         sequence:
           - service: light.turn_on
             target: !input target_light
             data:
-              brightness_pct: >
-                {% if var_target_brightness | int > 0 %}
-                  {{ var_target_brightness }}
-                {% else %}
-                  {{ state_attr(var_target_light, 'brightness') | default(255) | int / 2.55 }}
-                {% endif %}
-              kelvin: >
-                {% if var_target_kelvin | int > 0 %}
-                  {{ var_target_kelvin }}
-                {% else %}
-                  {{ state_attr(var_target_light, 'color_temp_kelvin') | default(3000) }}
-                {% endif %}
+              brightness_pct: "{{ var_target_brightness }}"
+              kelvin: "{{ var_target_kelvin }}"
+
+      # SCENARIO 2: User set ONLY Brightness
+      - conditions:
+          - condition: template
+            value_template: "{{ var_target_brightness | int > 0 }}"
+        sequence:
+          - service: light.turn_on
+            target: !input target_light
+            data:
+              brightness_pct: "{{ var_target_brightness }}"
+
+      # SCENARIO 3: User set ONLY Color
+      - conditions:
+          - condition: template
+            value_template: "{{ var_target_kelvin | int > 0 }}"
+        sequence:
+          - service: light.turn_on
+            target: !input target_light
+            data:
+              kelvin: "{{ var_target_kelvin }}"
+
+    # SCENARIO 4 (Default): User set NOTHING -> Just Turn On (Use Memory)
     default:
       - service: homeassistant.turn_on
         target: !input target_light
