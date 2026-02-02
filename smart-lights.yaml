@@ -124,11 +124,18 @@ action:
   - service: homeassistant.turn_on
     target: !input target_entities
 
-  - wait_for_trigger:
-    - platform: state
-      entity_id: !input motion_sensor
-      to: "off"
-      for: !input off_timer
+  - if:
+      - condition: state
+        entity_id: !input motion_sensor
+        state: "on"
+    then:
+      - wait_for_trigger:
+          - platform: state
+            entity_id: !input motion_sensor
+            to: "off"
+
+  - delay: 
+      seconds: !input off_timer
 
   - service: homeassistant.turn_off
     target: !input target_entities
