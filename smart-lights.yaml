@@ -1,7 +1,7 @@
 blueprint:
   name: Smart Motion Lights & Switches
   description: >
-    Version: 0.9 Almost there
+    Version: 1.0 Genesis
     
     Turn on lights when motion is detected IF:
     1. It is Night (based on Sun Schedule)
@@ -173,6 +173,7 @@ trigger:
   - platform: state
     entity_id: !input motion_entity
     to: "on"
+    alias: "Motion Detected"
 
 condition:
   - condition: or
@@ -221,7 +222,7 @@ action:
               brightness_pct: "{{ var_target_brightness }}"
             continue_on_error: true
 
-      # SCENARIO 3: User set only temperature
+      # SCENARIO 3: User set only Temperature
       - conditions:
           - condition: template
             value_template: "{{ var_target_kelvin | int > 0 }}"
