@@ -1,7 +1,7 @@
 blueprint:
   name: Smart Motion Lights & Switches
   description: >
-    Version: 1.6 Set kelvin within capabilities
+    Version: 0.9 Almost there
     
     Turn on lights when motion is detected IF:
     1. It is Night (based on Sun Schedule)
@@ -50,7 +50,7 @@ blueprint:
     # ----------------------------------------------------------------
     section_sun:
       name: Sun Schedule
-      description: The primary rule. Defines "Night Time".
+      description: Mainly designed for night time. Can be overriden by lux
       icon: mdi:weather-sunset
       input:
         sunset_offset:
@@ -74,8 +74,8 @@ blueprint:
     # SECTION 3: LUX OVERRIDE (Optional)
     # ----------------------------------------------------------------
     section_lux:
-      name: Lux (Optional)
-      description: Triggers even during the day if it's dark (Cloudy/Indoors).
+      name: Lux (Overrides Sun Schedule)
+      description: Triggers lights based on lux, useful for cloudy indoors.
       icon: mdi:brightness-6
       collapsed: true
       input:
@@ -102,7 +102,7 @@ blueprint:
     # ----------------------------------------------------------------
     section_light_settings:
       name: Advanced Light Settings (Optional)
-      description: Optionally choose brightness & color temperature (if supported).
+      description: Choose brightness & color temperature (if supported).
       icon: mdi:lightbulb-on-50
       collapsed: true
       input:
@@ -206,7 +206,7 @@ action:
             target: !input target_light
             data:
               brightness_pct: "{{ var_target_brightness }}"
-              kelvin: "{{ safe_kelvin }}"
+              color_temp_kelvin: "{{ safe_kelvin }}"
             # FIX: Prevent crash if device rejects the color
             continue_on_error: true
 
@@ -229,7 +229,7 @@ action:
           - service: light.turn_on
             target: !input target_light
             data:
-              kelvin: "{{ safe_kelvin }}"
+              color_temp_kelvin: "{{ safe_kelvin }}"
             continue_on_error: true
           
     # SCENARIO 4 (Default): User set NOTHING -> Just Turn On (Use Memory)
