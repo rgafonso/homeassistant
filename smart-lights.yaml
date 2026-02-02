@@ -131,6 +131,25 @@ variables:
   var_target_brightness: !input target_brightness
   var_target_kelvin: !input target_kelvin
   var_target_light: !input target_light
+  safe_kelvin: >
+    {# 1. Initialize with User Input #}
+    {% set ns = namespace(kelvin=var_target_kelvin | int) %}
+    
+    {# 2. Expand Areas & Entities into a single flat list #}
+    {% set areas = area_entities(var_target_light.area_id | default([])) %}
+    {% set entities = var_target_light.entity_id | default([]) %}
+    {% set all_lights = (entities + areas) | unique | list %}
+  
+    {# 3. Run Your Loop (Only if user actually requested a color > 0) #}
+    {% if ns.kelvin > 0 %}
+      {% for light in all_lights %}
+        {# Your snippet logic: #}
+        {% set ns.kelvin = [[ns.kelvin, state_attr(light, 'min_color_temp_kelvin')]|max, state_attr(light, 'max_color_temp_kelvin')]|min %}
+      {% endfor %}
+    {% endif %}
+  
+    {# 4. Output the Final Result #}
+    {{ ns.kelvin }}
 
 trigger:
   - platform: state
@@ -157,9 +176,8 @@ condition:
             below: !input lux_threshold
 
 action:
-  # LOGIC: Check exactly what the user requested and send ONLY that.
   - choose:
-      # SCENARIO 1: User set BOTH Brightness AND Color
+      # SCENARIO 1: User set both Brightness and temperature
       - conditions:
           - condition: template
             value_template: "{{ var_target_brightness | int > 0 }}"
@@ -170,9 +188,11 @@ action:
             target: !input target_light
             data:
               brightness_pct: "{{ var_target_brightness }}"
-              kelvin: "{{ var_target_kelvin }}"
+              kelvin: "{{ safe_kelvin }}"
+            # FIX: Prevent crash if device rejects the color
+            continue_on_error: true
 
-      # SCENARIO 2: User set ONLY Brightness
+      # SCENARIO 2: User set only Brightness
       - conditions:
           - condition: template
             value_template: "{{ var_target_brightness | int > 0 }}"
@@ -181,8 +201,9 @@ action:
             target: !input target_light
             data:
               brightness_pct: "{{ var_target_brightness }}"
+            continue_on_error: true
 
-      # SCENARIO 3: User set ONLY Color
+      # SCENARIO 3: User set only temperature
       - conditions:
           - condition: template
             value_template: "{{ var_target_kelvin | int > 0 }}"
@@ -190,8 +211,9 @@ action:
           - service: light.turn_on
             target: !input target_light
             data:
-              kelvin: "{{ var_target_kelvin }}"
-
+              kelvin: "{{ safe_kelvin }}"
+            continue_on_error: true
+          
     # SCENARIO 4 (Default): User set NOTHING -> Just Turn On (Use Memory)
     default:
       - service: homeassistant.turn_on
