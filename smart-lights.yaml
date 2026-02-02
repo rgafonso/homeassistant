@@ -133,17 +133,31 @@ variables:
   var_target_light: !input target_light
   safe_kelvin: >
     {# 1. Initialize with User Input #}
-    {% set ns = namespace(kelvin=var_target_kelvin | int) %}
+    {% set ns = namespace(kelvin=var_target_kelvin | int, lights=[]) %}
     
-    {# 2. Expand Areas & Entities into a single flat list #}
-    {% set areas = area_entities(var_target_light.area_id | default([])) %}
+    {# 2. Get direct Entities #}
     {% set entities = var_target_light.entity_id | default([]) %}
-    {% set all_lights = (entities + areas) | unique | list %}
+    {% set ns.lights = ns.lights + entities %}
+
+    {# 3. Get entities from Areas (Fix: Loop through the list) #}
+    {% set area_ids = var_target_light.area_id | default([]) %}
+    {% for area in area_ids %}
+      {% set ns.lights = ns.lights + area_entities(area) %}
+    {% endfor %}
+
+    {# 4. Get entities from Devices (Fix: Loop through devices too) #}
+    {% set device_ids = var_target_light.device_id | default([]) %}
+    {% for dev in device_ids %}
+      {% set ns.lights = ns.lights + device_entities(dev) %}
+    {% endfor %}
+
+    {# 5. Clean up duplicates #}
+    {% set all_lights = ns.lights | unique | list %}
    
-    {# 3. Run Your Loop #}
+    {# 6. Run the Safety Loop #}
     {% if ns.kelvin > 0 %}
       {% for light in all_lights %}
-        {# SAFETY: Use default(0, true) for switches that lack the attribute #}
+        {# SAFETY: Default to 0/10000 for non-color devices (switches/dimmers) #}
         {% set current_min = state_attr(light, 'min_color_temp_kelvin') | default(0, true) %}
         {% set current_max = state_attr(light, 'max_color_temp_kelvin') | default(10000, true) %}
         
@@ -152,7 +166,7 @@ variables:
       {% endfor %}
     {% endif %}
    
-    {# 4. Output the Final Result #}
+    {# 7. Output Result #}
     {{ ns.kelvin }}
 
 trigger:
