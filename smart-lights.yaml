@@ -124,9 +124,11 @@ action:
   - service: homeassistant.turn_on
     target: !input target_entities
 
-  - wait_template: "{{ is_state(motion_sensor, 'off') }}"
-    for: !input off_timer
-    continue_on_timeout: true
+  - wait_for_trigger:
+    - platform: state
+      entity_id: !input motion_sensor
+      to: "off"
+      for: !input off_timer
 
   - service: homeassistant.turn_off
     target: !input target_entities
