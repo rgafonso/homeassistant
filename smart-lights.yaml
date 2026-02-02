@@ -1,19 +1,17 @@
 blueprint:
   name: Smart Motion Lights & Switches
   description: >
-    Version: 1.0 Genesis
+    Version: 1.0.1 (Lite)
     
     Turn on lights when motion is detected IF:
     1. It is Night (based on Sun Schedule)
     OR
     2. It is Dark (based on Lux Sensor, if provided)
+    
+    *Uses device memory for brightness/color.*
   domain: automation
-  # Ensure this matches your GitHub URL exactly
   source_url: https://github.com/rgafonso/homeassistant/blob/main/smart-lights.yaml
   input:
-    # ----------------------------------------------------------------
-    # SECTION 1: MOTION & LIGHT
-    # ----------------------------------------------------------------
     section_core:
       name: Motion & Light
       description: The main settings for your automation.
@@ -44,10 +42,6 @@ blueprint:
               min: 0
               max: 300
               unit_of_measurement: seconds
-
-    # ----------------------------------------------------------------
-    # SECTION 2: SUN SCHEDULE (Primary)
-    # ----------------------------------------------------------------
     section_sun:
       name: Sun Schedule
       description: Mainly designed for night time. Can be overridden by illuminance
@@ -69,10 +63,6 @@ blueprint:
           default: "-00:30:00"
           selector:
             text: {}
-
-    # ----------------------------------------------------------------
-    # SECTION 3: LUX OVERRIDE (Optional)
-    # ----------------------------------------------------------------
     section_illuminance:
       name: Illuminance or Lux (Overrides Sun Schedule)
       description: Triggers lights based on illuminance, useful for cloudy indoors.
@@ -97,78 +87,12 @@ blueprint:
               min: 0
               max: 1000
 
-    # ----------------------------------------------------------------
-    # SECTION 4: LIGHT PROPERTIES (Optional)
-    # ----------------------------------------------------------------
-    section_light_settings:
-      name: Advanced Light Settings (Optional)
-      description: Choose brightness & color temperature (if supported).
-      icon: mdi:lightbulb-on-50
-      collapsed: true
-      input:
-        brightness:
-          name: Brightness %
-          default: 0
-          selector:
-            number:
-              min: 0
-              max: 100
-              unit_of_measurement: "%"
-        kelvin:
-          name: Color Temp (K)
-          default: 0
-          selector:
-            number:
-              min: 0
-              max: 6500
-              unit_of_measurement: K
-
 mode: restart
 max_exceeded: silent
 
 variables:
+  # We still need this variable to check if the user provided a sensor
   illuminance_sensor: !input illuminance_sensor
-  brightness: !input brightness
-  kelvin: !input kelvin
-  target_entities: !input target_entities
-  safe_kelvin: >
-    {# 1. Initialize with User Input #}
-    {% set ns = namespace(kelvin=kelvin | int, lights=[]) %}
-    
-    {# 2. Get direct Entities #}
-    {% set entities = target_entities.entity_id | default([]) %}
-    {% set ns.lights = ns.lights + entities %}
-
-    {# 3. Get entities from Areas (Fix: Loop through the list) #}
-    {% set area_ids = target_entities.area_id | default([]) %}
-    {% for area in area_ids %}
-      {% set ns.lights = ns.lights + area_entities(area) %}
-    {% endfor %}
-
-    {# 4. Get entities from Devices (Fix: Loop through devices too) #}
-    {% set device_ids = target_entities.device_id | default([]) %}
-    {% for dev in device_ids %}
-      {% set ns.lights = ns.lights + device_entities(dev) %}
-    {% endfor %}
-
-    {# 5. Clean up duplicates #}
-    {% set all_lights = ns.lights | unique | list %}
-   
-    {# 6. Run the Safety Loop #}
-    {% if ns.kelvin > 0 %}
-      {% for light in all_lights %}
-        {# SAFETY: Default to -1 for non-color devices (switches/dimmers) #}
-        {% set min_kelvin = state_attr(light, 'min_color_temp_kelvin') | default(-1, true) %}
-        {% set max_kelvin = state_attr(light, 'max_color_temp_kelvin') | default(-1, true) %}
-
-        {% if min_kelvin > 0 %}
-          {% set ns.kelvin = [[ns.kelvin, min_kelvin]|max, max_kelvin]|min %}
-        {% endif %}
-      {% endfor %}
-    {% endif %}
-   
-    {# 7. Output Result #}
-    {{ ns.kelvin }}
 
 trigger:
   - platform: state
@@ -196,47 +120,9 @@ condition:
             below: !input illuminance_threshold
 
 action:
-  - choose:
-      # SCENARIO 1: User set both Brightness and temperature
-      - conditions:
-          - condition: template
-            value_template: "{{ brightness | int > 0 }}"
-          - condition: template
-            value_template: "{{ kelvin | int > 0 }}"
-        sequence:
-          - service: light.turn_on
-            target: !input target_entities
-            data:
-              brightness_pct: "{{ brightness }}"
-              color_temp_kelvin: "{{ safe_kelvin }}"
-              transition: 0
-
-      # SCENARIO 2: User set only Brightness
-      - conditions:
-          - condition: template
-            value_template: "{{ brightness | int > 0 }}"
-        sequence:
-          - service: light.turn_on
-            target: !input target_entities
-            data:
-              brightness_pct: "{{ brightness }}"
-              transition: 0
-
-      # SCENARIO 3: User set only Temperature
-      - conditions:
-          - condition: template
-            value_template: "{{ kelvin | int > 0 }}"
-        sequence:
-          - service: light.turn_on
-            target: !input target_entities
-            data:
-              color_temp_kelvin: "{{ safe_kelvin }}"
-              transition: 0
-          
-    # SCENARIO 4 (Default): User set NOTHING -> Just Turn On (Use Memory)
-    default:
-      - service: homeassistant.turn_on
-        target: !input target_entities
+  # DIRECT ACTION: No more choose/default logic needed
+  - service: homeassistant.turn_on
+    target: !input target_entities
 
   - wait_for_trigger:
       - platform: state
