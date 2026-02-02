@@ -1,7 +1,7 @@
 blueprint:
   name: Smart Motion Lights & Switches
   description: >
-    Version: 1.0.2 (Bulletproof Wait)
+    Version: 1.0.3 (accept motion/occupancy and presence)
     
     Turn on lights when motion is detected IF:
     1. It is Night (based on Sun Schedule)
