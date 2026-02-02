@@ -23,7 +23,9 @@ blueprint:
           selector:
             entity:
               domain: binary_sensor
-              device_class: motion
+                - motion
+                - occupancy
+                - presence
         target_entities:
           name: Lights & Switches
           description: Select all that you wish to enable
