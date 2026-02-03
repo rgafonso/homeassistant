@@ -1,7 +1,7 @@
 blueprint:
   name: Smart Motion Lights & Switches
   description: |
-    Version: 1.0.3
+    Version: 1.0.4
     
     Turn on lights when motion, occupancy or presence is detected if it's night time, based on sunset/sunrise (with offsets) for your location.
     Can be overriden by lux (illuminance) sensor and threshold, useful for indoors or cloudy days
@@ -63,14 +63,14 @@ blueprint:
           selector:
             text: {}
     section_illuminance:
-      name: Lux Settings (Overrides Sun Schedule)
-      description: Triggers lights based on illuminance, useful for cloudy indoors.
+      name: Lux Settings (Optional, overrides Sun Schedule)
+      description: Triggers lights based on lux, useful for cloudy days or indoors.
       icon: mdi:brightness-6
       collapsed: true
       input:
         illuminance_sensor:
-          name: Lux (illuminance) Sensor
-          description: If set, lights turn on when below threshold (regardless of sun).
+          name: Lux Sensor (illuminance)
+          description: If set, lux threshold is the first trigger
           default: []
           selector:
             entity:
@@ -78,9 +78,14 @@ blueprint:
               device_class: illuminance
               multiple: false
         illuminance_threshold:
-          name: Lux (illuminance) Threshold
-          description: Always trigger if lux is below this value and lux sensor set.
-          default: 50
+          name: Lux Threshold
+          description: |
+            Triggers if detected lux below threshold
+            - 0: Total Darkness.
+            - 50: A dim living room / Dusk.
+            - 300-500: A bright office.
+            - 1,000: Overcast day (Cloudy)
+          default: 500
           selector:
             number:
               min: 0
