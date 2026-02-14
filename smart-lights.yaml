@@ -1,7 +1,7 @@
 blueprint:
-  name: Smart Motion Lights & Switches
+  name: Smart Presence Lights & Switches
   description: |
-    Version: 1.0.4
+    Version: 1.0.5
     
     Turn on lights when motion, occupancy or presence is detected if it's night time, based on sunset/sunrise (with offsets) for your location.
     Can be overriden by lux (illuminance) sensor and threshold, useful for indoors or cloudy days
@@ -125,21 +125,26 @@ condition:
             below: !input illuminance_threshold
 
 action:
+  # 1. Liga as luzes
   - service: homeassistant.turn_on
     target: !input target_entities
 
-  - if:
-      - condition: state
+  # 2. Espera que o sensor passe para 'off' (Ocupação terminada)
+  - wait_for_trigger:
+      - platform: state
         entity_id: !input main_sensor
-        state: "on"
-    then:
-      - wait_for_trigger:
-          - platform: state
-            entity_id: !input main_sensor
-            to: "off"
+        to: "off"
+        from: "on"
+    # Opcional: podes definir um timeout aqui se desejares segurança extra
 
-  - delay: 
-      seconds: !input off_timer
+  # 3. Espera o tempo definido pelo utilizador após o último movimento
+  - delay: !input off_timer
+
+  # 4. Só desliga se o sensor AINDA estiver em 'off'
+  # (Evita apagar a luz se alguém entrou nos últimos milissegundos do delay)
+  - condition: state
+    entity_id: !input main_sensor
+    state: "off"
 
   - service: homeassistant.turn_off
     target: !input target_entities
