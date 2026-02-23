@@ -1,10 +1,10 @@
 blueprint:
-  name: Smart Presence Lights & Switches (Pro)
+  name: Smart Presence Lights & Switches (Pro with Bypass)
   description: |
-    Version: 2.0.0 - Production Ready
+    Version: 2.1.0 - Production Ready
     
     Turn on lights when motion, occupancy or presence is detected if it's night time, based on sunset/sunrise (with offsets) for your location.
-    Includes fail-safes for sensor disconnections, network spam prevention, and handles the "already in the room when it gets dark" edge case.
+    Includes fail-safes for sensor disconnections, handles the "already in the room when it gets dark" edge case, and supports a Manual Override (Bypass) switch.
   domain: automation
   input:
     section_core:
@@ -40,6 +40,7 @@ blueprint:
               min: 0
               max: 300
               unit_of_measurement: seconds
+
     section_sun:
       name: Sun Schedule
       description: Night time boundaries. Can be overridden by the Lux sensor.
@@ -63,9 +64,27 @@ blueprint:
           default: "-00:30:00"
           selector:
             text: {}
+
+    section_override:
+      name: Manual Override (Bypass)
+      description: Prevent the automation from running if a specific switch is turned on (e.g., your Sonoff Wall Switch).
+      icon: mdi:lock
+      collapsed: true
+      input:
+        bypass_switch:
+          name: Bypass Entity
+          description: Select a switch or input_boolean. When ON, motion automation is paused and will not interfere.
+          default: ""
+          selector:
+            entity:
+              domain:
+                - input_boolean
+                - switch
+              multiple: false
+
     section_illuminance:
       name: Lux Settings (Optional)
-      description: Overrides the Sun schedule. Triggers lights based on lux, useful for cloudy days or indoors.
+      description: Overrides the Sun schedule. Triggers lights based on lux, useful for cloudy days.
       icon: mdi:brightness-6
       collapsed: true
       input:
@@ -98,6 +117,7 @@ max_exceeded: silent
 variables:
   illuminance_sensor: !input illuminance_sensor
   illuminance_threshold: !input illuminance_threshold
+  bypass_switch: !input bypass_switch
   main_sensor: !input main_sensor
 
 trigger:
@@ -117,8 +137,12 @@ trigger:
     alias: "Trigger: Lux Dropped Below Threshold"
 
 condition:
-  # Check 1: Is someone actually in the room right now? 
-  # (Crucial if the automation was triggered by the Sun or Lux drop)
+  # FAIL-SAFE 1: Is the Bypass active? If yes, halt automation immediately.
+  - condition: template
+    alias: "Condition: Is Bypass OFF or Undefined?"
+    value_template: "{{ bypass_switch == '' or bypass_switch == none or states(bypass_switch) != 'on' }}"
+
+  # Check 1: Is someone actually out there right now?
   - condition: state
     entity_id: !input main_sensor
     state: "on"
@@ -128,7 +152,6 @@ condition:
   - condition: or
     alias: "Condition: Is it dark? (Evaluate Sun or Lux)"
     conditions:
-      # RULE 1: Sun Schedule
       - condition: sun
         alias: "Rule 1: Is it night time (Sun)?"
         after: sunset
@@ -136,7 +159,6 @@ condition:
         before: sunrise
         before_offset: !input sunrise_offset
 
-      # RULE 2: Lux Override (Safe Template Validation)
       - condition: and
         alias: "Rule 2: Is Lux below threshold?"
         conditions:
@@ -166,6 +188,11 @@ action:
     entity_id: !input main_sensor
     state: "off"
     alias: "Fail-Safe: Is the sensor STILL 'off'?"
+
+  # FAIL-SAFE 2: Did someone turn on the Bypass switch DURING the delay?
+  - condition: template
+    alias: "Condition: Is Bypass still OFF?"
+    value_template: "{{ bypass_switch == '' or bypass_switch == none or states(bypass_switch) != 'on' }}"
 
   - service: homeassistant.turn_off
     alias: "Action: Turn OFF Lights & Switches"
