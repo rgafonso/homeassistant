@@ -1,21 +1,20 @@
 blueprint:
-  name: Smart Presence Lights & Switches
+  name: Smart Presence Lights & Switches (Pro)
   description: |
-    Version: 1.0.5
+    Version: 2.0.0 - Production Ready
     
     Turn on lights when motion, occupancy or presence is detected if it's night time, based on sunset/sunrise (with offsets) for your location.
-    Can be overriden by lux (illuminance) sensor and threshold, useful for indoors or cloudy days
+    Includes fail-safes for sensor disconnections, network spam prevention, and handles the "already in the room when it gets dark" edge case.
   domain: automation
-  source_url: https://github.com/rgafonso/homeassistant/blob/main/smart-lights.yaml
   input:
     section_core:
       name: Sensor + Lights & Switches
-      description: The main settings for your automation.
+      description: Main settings for your automation.
       icon: mdi:run
       input:
         main_sensor:
           name: Main Sensor
-          description: Choose a motion, occupancy or presence sensor
+          description: Choose a motion, occupancy or presence sensor.
           selector:
             entity:
               domain: binary_sensor
@@ -25,7 +24,7 @@ blueprint:
                 - presence
         target_entities:
           name: Lights & Switches
-          description: Select all that you wish to enable
+          description: Select all devices that you wish to enable.
           selector:
             target:
               entity:
@@ -34,7 +33,7 @@ blueprint:
                   - switch
         off_timer:
           name: Wait Time (Seconds)
-          description: The time which after sensor is off, the lights & switches also turn off
+          description: Time to wait after the sensor clears before turning off the lights.
           default: 30
           selector:
             number:
@@ -43,35 +42,37 @@ blueprint:
               unit_of_measurement: seconds
     section_sun:
       name: Sun Schedule
-      description: Mainly designed for night time. Can be overridden by lux (illuminance)
+      description: Night time boundaries. Can be overridden by the Lux sensor.
       icon: mdi:weather-sunset
       input:
         sunset_offset:
           name: Sunset Offset
           description: >
-            Positive (e.g. 00:30:00) starts after sunset.
-            Negative (e.g. -00:15:00) starts before sunset.
+            MANDATORY FORMAT: HH:MM:SS.
+            Positive (e.g. 00:30:00) triggers after sunset.
+            Negative (e.g. -00:15:00) triggers before sunset.
           default: "00:30:00"
           selector:
             text: {}
         sunrise_offset:
           name: Sunrise Offset
           description: >
+            MANDATORY FORMAT: HH:MM:SS.
             Negative (e.g. -00:30:00) stops after sunrise.
             Positive (e.g. 00:15:00) stops before sunrise.
           default: "-00:30:00"
           selector:
             text: {}
     section_illuminance:
-      name: Lux Settings (Optional, overrides Sun Schedule)
-      description: Triggers lights based on lux, useful for cloudy days or indoors.
+      name: Lux Settings (Optional)
+      description: Overrides the Sun schedule. Triggers lights based on lux, useful for cloudy days or indoors.
       icon: mdi:brightness-6
       collapsed: true
       input:
         illuminance_sensor:
           name: Lux Sensor (illuminance)
-          description: If set, lux threshold is the first trigger
-          default: []
+          description: If set, the lux threshold acts as the primary light restriction.
+          default: ""
           selector:
             entity:
               domain: sensor
@@ -80,11 +81,11 @@ blueprint:
         illuminance_threshold:
           name: Lux Threshold
           description: |
-            Triggers if detected lux below threshold
-            - 0: Total Darkness.
-            - 50: A dim living room / Dusk.
-            - 300-500: A bright office.
-            - 1,000: Overcast day (Cloudy)
+            Triggers if detected lux falls below this threshold:
+            - 0: Total Darkness
+            - 50: Dim room / Dusk
+            - 300-500: Bright office
+            - 1000: Overcast day
           default: 500
           selector:
             number:
@@ -96,55 +97,76 @@ max_exceeded: silent
 
 variables:
   illuminance_sensor: !input illuminance_sensor
-  # We need to map the motion sensor to a variable for the template check
+  illuminance_threshold: !input illuminance_threshold
   main_sensor: !input main_sensor
 
 trigger:
   - platform: state
     entity_id: !input main_sensor
     to: "on"
-    alias: "Motion Detected"
+    alias: "Trigger: Motion or Occupancy Detected"
+
+  - platform: sun
+    event: sunset
+    offset: !input sunset_offset
+    alias: "Trigger: Sun Set Reached"
+
+  - platform: template
+    value_template: >
+      {{ illuminance_sensor != '' and illuminance_sensor != none and states(illuminance_sensor) | float(1000) < illuminance_threshold | float }}
+    alias: "Trigger: Lux Dropped Below Threshold"
 
 condition:
+  # Check 1: Is someone actually in the room right now? 
+  # (Crucial if the automation was triggered by the Sun or Lux drop)
+  - condition: state
+    entity_id: !input main_sensor
+    state: "on"
+    alias: "Condition: Is there occupancy right now?"
+
+  # Check 2: Is it dark enough to turn on the lights?
   - condition: or
+    alias: "Condition: Is it dark? (Evaluate Sun or Lux)"
     conditions:
       # RULE 1: Sun Schedule
       - condition: sun
+        alias: "Rule 1: Is it night time (Sun)?"
         after: sunset
         after_offset: !input sunset_offset
         before: sunrise
         before_offset: !input sunrise_offset
 
-      # RULE 2: Lux Override (Only if sensor is set)
+      # RULE 2: Lux Override (Safe Template Validation)
       - condition: and
+        alias: "Rule 2: Is Lux below threshold?"
         conditions:
           - condition: template
-            value_template: "{{ illuminance_sensor != [] }}"
-          - condition: numeric_state
-            entity_id: !input illuminance_sensor
-            below: !input illuminance_threshold
+            alias: "Check if the Illuminance Sensor is defined"
+            value_template: "{{ illuminance_sensor != '' and illuminance_sensor != none }}"
+          
+          - condition: template
+            alias: "Check if current Lux is below threshold"
+            value_template: "{{ states(illuminance_sensor) | float(1000) < illuminance_threshold | float }}"
 
 action:
-  # 1. Liga as luzes
   - service: homeassistant.turn_on
+    alias: "Action: Turn ON Lights & Switches"
     target: !input target_entities
 
-  # 2. Espera que o sensor passe para 'off' (Ocupação terminada)
   - wait_for_trigger:
       - platform: state
         entity_id: !input main_sensor
         to: "off"
-        from: "on"
-    # Opcional: podes definir um timeout aqui se desejares segurança extra
+    alias: "Wait: Until sensor clears (to 'off')"
 
-  # 3. Espera o tempo definido pelo utilizador após o último movimento
   - delay: !input off_timer
+    alias: "Wait: Countdown the user-defined delay timer"
 
-  # 4. Só desliga se o sensor AINDA estiver em 'off'
-  # (Evita apagar a luz se alguém entrou nos últimos milissegundos do delay)
   - condition: state
     entity_id: !input main_sensor
     state: "off"
+    alias: "Fail-Safe: Is the sensor STILL 'off'?"
 
   - service: homeassistant.turn_off
+    alias: "Action: Turn OFF Lights & Switches"
     target: !input target_entities
