@@ -1,7 +1,7 @@
 blueprint:
   name: Smart Presence Lights & Switches (Pro with Bypass)
   description: |
-    Version: 2.1.0 - Production Ready
+    Version: 2.1.1 - Production Ready
     
     Turn on lights when motion, occupancy or presence is detected if it's night time, based on sunset/sunrise (with offsets) for your location.
     Includes fail-safes for sensor disconnections, handles the "already in the room when it gets dark" edge case, and supports a Manual Override (Bypass) switch.
@@ -133,7 +133,7 @@ trigger:
 
   - platform: template
     value_template: >
-      {{ illuminance_sensor != '' and illuminance_sensor != none and states(illuminance_sensor) | float(1000) < illuminance_threshold | float }}
+      {{ illuminance_sensor is defined and illuminance_sensor != '' and illuminance_sensor != none and states(illuminance_sensor) | float(1000) < illuminance_threshold | float }}
     alias: "Trigger: Lux Dropped Below Threshold"
 
 condition:
